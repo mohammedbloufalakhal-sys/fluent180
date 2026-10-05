@@ -53,7 +53,7 @@
   --good:#52C68D; --good-soft:#15301F; --warn:#E3A74E; --warn-soft:#33271A;
   --rep:#F0894A; --rep-soft:#3A2418; --info:#84A9EA; --info-soft:#1A2640; --bad:#E77C7C; --bad-soft:#3A1E1E; color-scheme:dark}
 *{box-sizing:border-box}
-body{margin:0;min-height:100dvh;overflow-x:clip;background-color:var(--bg);background-image:var(--glow);background-repeat:no-repeat;color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5;font-feature-settings:"rlig" 1,"calt" 1;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%;padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));padding-block:0 calc(48px + env(safe-area-inset-bottom,0px))}
+body{margin:0;min-height:100dvh;overflow-x:clip;background-color:var(--bg);background-image:var(--glow);background-repeat:no-repeat;color:var(--ink);font-family:var(--f-body);font-size:1rem;line-height:1.5;font-feature-settings:"rlig" 1,"calt" 1;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%;padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));padding-block:0 calc(48px + env(safe-area-inset-bottom,0px))}
 button,select,input,textarea,a{touch-action:manipulation}
 ::selection{background:var(--accent-soft)}
 img{max-width:100%}[hidden]{display:none!important}
@@ -175,6 +175,21 @@ table.t th{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:
 .ach{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:10px;border:1px solid var(--line)}
 .ach.off{opacity:.45}
 .ach .medal{width:30px;height:30px;border-radius:50%;background:var(--gold-soft);color:var(--gold);display:grid;place-items:center;font-weight:700;font-family:var(--f-display);flex:none}
+.say{display:inline-grid;place-items:center;width:32px;height:32px;margin-left:6px;vertical-align:middle;flex:none;padding:0;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--accent);cursor:pointer;transition:border-color .15s var(--ease)}
+.say:hover{border-color:var(--accent)}
+.say svg{width:15px;height:15px}
+/* phones: the top nav rail becomes a bottom tab bar with a "More" sheet */
+.tabbar,.moresheet{display:none}
+@media (max-width:640px){
+  .navwrap{display:none}
+  body{padding-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+  .tabbar{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;position:fixed;z-index:6;inset:auto 0 0 0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));background:color-mix(in srgb,var(--bg) 84%,transparent);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);border-top:1px solid var(--line)}
+  .tabbar button,.moresheet button{border:0;background:transparent;color:var(--muted);font:500 .85rem var(--f-body);min-height:48px;border-radius:12px;cursor:pointer}
+  .tabbar button[aria-current="page"],.moresheet button[aria-current="page"]{color:var(--ink);background:var(--sunk)}
+  .moresheet:not([hidden]){display:flex;flex-direction:column;gap:4px;position:fixed;z-index:6;right:8px;bottom:calc(68px + env(safe-area-inset-bottom,0px));min-width:190px;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+  .moresheet button{text-align:left;padding:0 14px}
+  .toast{bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+}
 @media (max-width:520px){.card{padding:16px;border-radius:16px}.bar{grid-template-columns:96px 1fr 38px}.bigscore{font-size:2.1rem}}
 </style>
 
@@ -711,6 +726,21 @@ const SRC=window.SpeechRecognition||window.webkitSpeechRecognition||null;
 let SR_BLOCKED=false;
 function blank(){return{v:1,created:Date.now(),profile:null,placement:null,assessments:[],day:1,phaseIdx:{},skills:{},topics:{},errors:[],vocab:[],days:[],today:null,next:null,streak:{cur:0,longest:0,last:null},stats:{minutes:0,speakingMin:0,speaking:0,writing:0,conversations:0,interviews:0,words:0},interviews:[],achievements:{},share:false,weekly:[],lastReport:null,lastActive:null}}
 
+/* ================= device preferences (text size, theme, listening speed) — kept apart from learning progress ================= */
+const PREF_KEY='fluent180_prefs',SIZES={small:'93.75%',medium:'100%',large:'115%'};
+let PREFS={size:'medium',theme:'auto',speed:1};
+try{const p=JSON.parse(localStorage.getItem(PREF_KEY)||'null');if(p&&typeof p==='object')PREFS={size:SIZES[p.size]?p.size:'medium',theme:['auto','light','dark'].includes(p.theme)?p.theme:'auto',speed:[.75,1,1.25].includes(p.speed)?p.speed:1}}catch(e){}
+function applyPrefs(){
+  const r=document.documentElement;r.style.fontSize=SIZES[PREFS.size];
+  /* "auto" leaves data-theme alone unless we set it ourselves, so a host page's own theme switch keeps working */
+  if(PREFS.theme!=='auto'){r.setAttribute('data-theme',PREFS.theme);r.dataset.f180theme='1'}
+  else if(r.dataset.f180theme){r.removeAttribute('data-theme');delete r.dataset.f180theme}
+}
+function setPref(k,v){PREFS[k]=v;try{localStorage.setItem(PREF_KEY,JSON.stringify(PREFS))}catch(e){}applyPrefs()}
+function prefChips(k,opts){return `<div class="seg" data-pref="${k}">${opts.map(([v,l])=>`<button type="button" class="chip" data-v="${v}" aria-pressed="${PREFS[k]===v}">${l}</button>`).join('')}</div>`}
+function wirePrefChips(){document.querySelectorAll('[data-pref]').forEach(g=>g.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{const k=g.dataset.pref;setPref(k,k==='speed'?+c.dataset.v:c.dataset.v);g.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',String(x===c)))}))}
+applyPrefs();
+
 /* ================= persistence ================= */
 let saveTimer=null,saveChain=Promise.resolve(),saveState='';
 function save(){clearTimeout(saveTimer);saveTimer=setTimeout(doSave,700)}
@@ -930,6 +960,19 @@ function sayLines(lines,rate,done){
     const u=new SpeechSynthesisUtterance(l.t);u.lang='en-US';u.rate=rate;if(VOICES.length)u.voice=VOICES[vi%VOICES.length];
     if(i===lines.length-1)u.onend=()=>done&&done();speechSynthesis.speak(u)});
 }
+/* tap to listen: a speaker button is added to corrections and model answers as they render */
+const SAY_SEL='.corr .to,details.panel>p,[data-say]';
+function addSayButtons(){
+  document.querySelectorAll('#app :is('+SAY_SEL+'):not([data-sp])').forEach(el=>{
+    el.setAttribute('data-sp','');if(!el.textContent.trim())return;
+    const b=document.createElement('button');b.type='button';b.className='say';b.title='Listen';b.setAttribute('aria-label','Listen');
+    b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/></svg>';
+    el.appendChild(b)});
+}
+if(TTS){
+  new MutationObserver(addSayButtons).observe($('#app'),{childList:true,subtree:true});
+  document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.say');if(!b)return;e.preventDefault();e.stopPropagation();speechSynthesis.cancel();say(b.parentElement.textContent.trim(),{rate:.95*PREFS.speed})});
+}
 /* recorder: tries speech recognition, falls back to typing */
 function recorder(boxId,onUpdate){
   const st={active:false,text:'',started:0,dur:0,mode:'typed',rec:null};
@@ -1012,19 +1055,27 @@ async function boot(){
 /* ================= shell ================= */
 const NAV=[['home','Today'],['progress','Progress'],['errors','Error bank'],['interview','Interview'],['work','Work English'],['coach','Coach view'],['settings','Settings']];
 function go(r){ROUTE=r;RT.task=null;if(TTS)speechSynthesis.cancel();render();window.scrollTo(0,0)}
+const TABS=['home','progress','interview'];
 function shell(inner){
   const onboarding=ROUTE==='onboard'||ROUTE==='placement'&&!S.placement;
   const lvl=band(overallLevel());
+  /* Coach view needs the Claude account database, so it is hidden everywhere else */
+  const items=NAV.filter(([k])=>k!=='coach'||(DB&&UID)),more=items.filter(([k])=>!TABS.includes(k));
+  const cur=k=>ROUTE===k||((ROUTE==='task'||ROUTE==='dayreport')&&k==='home');
+  const btn=([k,l])=>`<button data-go="${k}" ${cur(k)?'aria-current="page"':''}>${l}</button>`;
   return `<header class="top"><div class="row between"><div class="brand">Fluent<b>180</b></div>
    ${S.profile&&S.placement?`<div class="row" style="gap:16px"><span class="pillstat">Day <strong>${Math.min(S.day,180)}/180</strong></span><span class="pillstat">Streak <strong>${S.streak.cur}</strong></span><span class="pillstat">Level <strong>${lvl||'—'}</strong></span></div>`:''}</div>
-   ${onboarding?'':`<div class="navwrap"><nav class="nav" aria-label="Main">${NAV.map(([k,l])=>`<button data-go="${k}" ${ROUTE===k||(ROUTE==='task'&&k==='home')||(ROUTE==='dayreport'&&k==='home')?'aria-current="page"':''}>${l}</button>`).join('')}</nav></div>`}
+   ${onboarding?'':`<div class="navwrap"><nav class="nav" aria-label="Main">${items.map(btn).join('')}</nav></div>`}
   </header>
-  <main>${inner}</main>`;
+  <main>${inner}</main>
+  ${onboarding?'':`<nav class="tabbar" aria-label="Main">${items.filter(([k])=>TABS.includes(k)).map(btn).join('')}<button id="tb-more" aria-expanded="false" ${more.some(([k])=>cur(k))?'aria-current="page"':''}>More</button></nav>
+  <div class="moresheet" id="tb-sheet" hidden>${more.map(btn).join('')}</div>`}`;
 }
 function render(){
   const v={status:vStatus,onboard:vOnboard,placement:vPlacement,journey:vJourney,home:vHome,task:vTask,dayreport:vDayReport,progress:vProgress,errors:vErrors,interview:vInterview,work:vWork,settings:vSettings,coach:vCoach}[ROUTE]||vHome;
   $('#app').innerHTML=shell(v());
   document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+  const tm=$('#tb-more');if(tm)tm.onclick=()=>{const s=$('#tb-sheet');s.hidden=!s.hidden;tm.setAttribute('aria-expanded',String(!s.hidden))};
   (AFTER[ROUTE]||(()=>{}))();
 }
 const AFTER={};
@@ -1129,6 +1180,7 @@ function checkView(){
 function speakBox(p){
   const can=!!SRC&&!SR_BLOCKED;
   return `<div class="stack-s">
+   <div class="row"><span class="tag ${can?'good':'warn'}" id="${p}-mode">${can?'Voice input':'Typed input'}</span><span class="small muted">${can?'Speak your answer, or type it.':SRC?'The microphone is blocked, so type your answer.':'Voice input is not supported in this browser (it works in Chrome and Edge), so type your answer.'}</span></div>
    ${can?`<div class="row"><button class="btn" id="${p}-rec">● Start speaking</button><span class="small muted" id="${p}-recst">Uses your browser's speech recognition.</span></div>`:''}
    <textarea id="${p}-txt" style="min-height:130px" placeholder="${can?'Your words appear here as you speak. You can also type.':'Type exactly what you would say out loud, the way you would say it.'}"></textarea>
    ${can?'':`<p class="small muted">Microphone isn't available here, so this is typed speaking practice. Grammar, vocabulary and structure are scored; fluency and pronunciation are not measured.</p>`}
@@ -1139,7 +1191,8 @@ function wireSpeak(p,holder){
     if(t&&s.mode==='spoken')t.value=s.text;
     if(b)b.textContent=s.active?'■ Stop':'● Start speaking';
     if(l)l.textContent=s.blocked?'Microphone is blocked here. Type your answer instead; fluency will not be scored.':s.active?'Listening…':'Stopped. Edit the text if a word was misheard.';
-    if(s.blocked&&b)b.disabled=true;});
+    if(s.blocked&&b)b.disabled=true;
+    const md=$('#'+p+'-mode');if(md&&s.blocked){md.className='tag warn';md.textContent='Typed input'}});
   holder.rec=st;
   const b=$('#'+p+'-rec');if(b)b.onclick=()=>{if(st.active)st.stop();else st.start()};
   const t=$('#'+p+'-txt');if(t)t.oninput=()=>{st.text=t.value};
@@ -1467,12 +1520,14 @@ JSON: {"title":"","setting":"one sentence","lines":[{"s":"A|B","name":"","t":"li
   RT.l=RT.l&&RT.l.id===t.id?RT.l:{id:t.id,plays:0,ans:{},done:false};
   const L=RT.l,rate=phaseOf(S.day)<1?0.85:phaseOf(S.day)<3?0.95:1.05;
   body(`<div class="card stack"><div class="stack-s"><h2>${esc(c.title)}</h2><span class="muted">${esc(c.setting)}</span></div>
+   <div class="row"><span class="small muted">Speed</span>${prefChips('speed',[[.75,'0.75×'],[1,'1×'],[1.25,'1.25×']])}</div>
    <div class="row"><button class="btn primary" id="ls-play" ${L.plays>=3?'disabled':''}>${L.plays?'Play again':'Play dialogue'} (${3-L.plays} left)</button><button class="btn ghost" id="ls-stop">Stop</button></div>
    ${c.questions.map((q,qi)=>`<div class="stack-s"><h3>${qi+1}. ${esc(q.q)}</h3><div class="opts" data-q="${qi}">${q.o.map((o,k)=>`<button class="opt ${L.done?(o===q.a?'ok':L.ans[qi]===k?'no':''):L.ans[qi]===k?'sel':''}" data-k="${k}" ${L.done?'disabled':''}>${esc(o)}</button>`).join('')}</div></div>`).join('')}
    ${L.done?`<div class="panel stack-s"><span class="eyebrow">Transcript</span>${c.lines.map(l=>`<div><strong>${esc(l.name||l.s)}:</strong> ${esc(l.t)}</div>`).join('')}</div>
      <div class="stack-s"><span class="eyebrow">Useful phrases</span><ul class="fb-list">${(c.phrases||[]).map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`:`<div class="row"><button class="btn primary big" id="ls-check">Check answers</button></div>`}
    ${L.done?`<div class="row between"><span class="score" style="font-size:1.3rem">${t.score}/100</span><button class="btn primary big" id="tk-home">Back to today's plan</button></div>`:''}</div>`);
-  $('#ls-play').onclick=()=>{L.plays++;$('#ls-play').disabled=true;sayLines(c.lines.map(l=>({s:l.s,t:l.t})),rate,()=>{const b=$('#ls-play');if(b){b.disabled=L.plays>=3;b.textContent=`Play again (${3-L.plays} left)`}})};
+  wirePrefChips();
+  $('#ls-play').onclick=()=>{L.plays++;$('#ls-play').disabled=true;sayLines(c.lines.map(l=>({s:l.s,t:l.t})),rate*PREFS.speed,()=>{const b=$('#ls-play');if(b){b.disabled=L.plays>=3;b.textContent=`Play again (${3-L.plays} left)`}})};
   $('#ls-stop').onclick=()=>{if(TTS)speechSynthesis.cancel();const b=$('#ls-play');if(b)b.disabled=L.plays>=3};
   if(!L.done){
     document.querySelectorAll('.opts[data-q]').forEach(g=>g.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{g.querySelectorAll('.opt').forEach(x=>x.classList.remove('sel'));o.classList.add('sel');L.ans[+g.dataset.q]=+o.dataset.k}));
@@ -1904,7 +1959,7 @@ function vInterview(){
    <p class="small muted">Delivery indicators describe language only (length, fillers, clarity) — never personality.</p>${r.quick?`<p class="small muted">Quick feedback — scored automatically from grammar patterns, length, linking words and tone.</p>`:''}</div>
    <div class="grid2"><div class="card stack"><h3>Strong answers</h3><ul class="fb-list">${(r.strong||[]).map(x=>`<li>${esc(x)}</li>`).join('')||'<li class="muted">—</li>'}</ul></div>
    <div class="card stack"><h3>Questions to practise again</h3><ul class="fb-list">${(r.retry_questions||[]).map(x=>`<li>${esc(x)}</li>`).join('')||'<li class="muted">—</li>'}</ul></div></div>
-   ${(r.weak||[]).length?`<div class="card stack"><h3>Answers to rewrite</h3>${r.weak.map(w=>`<div class="panel stack-s"><strong>${esc(w.question)}</strong><span class="small muted">${esc(w.why)}</span><p><strong>Stronger answer:</strong> ${esc(w.better)}</p></div>`).join('')}</div>`:''}
+   ${(r.weak||[]).length?`<div class="card stack"><h3>Answers to rewrite</h3>${r.weak.map(w=>`<div class="panel stack-s"><strong>${esc(w.question)}</strong><span class="small muted">${esc(w.why)}</span><p><strong>Stronger answer:</strong> <span data-say>${esc(w.better)}</span></p></div>`).join('')}</div>`:''}
    <div class="row"><button class="btn primary big" id="iv-again">New interview</button></div></div>`;
 }
 AFTER.interview=()=>{
@@ -1954,7 +2009,7 @@ function vWork(){
   <div class="card stack"><h2>Extra practice</h2><p class="muted small">Each one is scored and asks for a rewrite if it's under 85. Results count toward your skill scores.</p>
    <div class="grid3">${[['email','Professional email','An email to your manager or a client'],['report','Short report','Situation, Facts, Action, Result, Next step'],['meeting','Meeting update','A spoken update in a team meeting'],['customer','Customer roleplay','Handle an unhappy customer'],['manager','Manager conversation','Explain a problem to your manager']].map(([k,n,d])=>`<button class="opt stack-s" data-wk="${k}"><strong>${n}</strong><span class="small muted">${d}</span></button>`).join('')}</div></div></div>`;
 }
-function workOut(o){return `<div class="stack-s">${[['Everyday',o.informal,'warn'],['Professional',o.professional,'acc'],['Polished',o.polished,'info']].map(([n,v,c])=>`<div class="panel stack-s"><span class="tag ${c}" style="align-self:flex-start">${n}</span><strong>${esc(v)}</strong></div>`).join('')}<p class="small">${esc(o.when)}</p>${o.note?`<p class="small muted">${esc(o.note)}</p>`:''}</div>`}
+function workOut(o){return `<div class="stack-s">${[['Everyday',o.informal,'warn'],['Professional',o.professional,'acc'],['Polished',o.polished,'info']].map(([n,v,c])=>`<div class="panel stack-s"><span class="tag ${c}" style="align-self:flex-start">${n}</span><strong data-say>${esc(v)}</strong></div>`).join('')}<p class="small">${esc(o.when)}</p>${o.note?`<p class="small muted">${esc(o.note)}</p>`:''}</div>`}
 AFTER.work=()=>{
   const W=RT.work;
   const g=$('#wk-go');if(g)g.onclick=async()=>{const v=$('#wk-in').value.trim();if(!v)return;W.input=v;$('#wk-out').innerHTML='<div class="loading small"><span class="spinner"></span> Rewriting…</div>';
@@ -2008,6 +2063,9 @@ function vSettings(){
    <label class="f">Target level<select id="st-goal">${['B1','B1+','B2','C1'].map(l=>`<option ${p.goalLevel===l?'selected':''}>${l}</option>`).join('')}</select></label>
    <label class="f">Minutes per day<select id="st-min">${[30,60,90,120].map(m=>`<option value="${m}" ${p.minutes===m?'selected':''}>${m}</option>`).join('')}</select></label>
   </div><div class="row"><button class="btn primary" type="submit">Save changes</button><span class="small muted" id="st-msg"></span></div></form>
+  <div class="card stack"><h2>Display</h2>
+   <div class="stack-s"><span class="f" style="font-weight:600">Text size</span>${prefChips('size',[['small','Small'],['medium','Medium'],['large','Large']])}</div>
+   <div class="stack-s"><span class="f" style="font-weight:600">Theme</span>${prefChips('theme',[['auto','Auto'],['light','Light'],['dark','Dark']])}<span class="small muted">Auto follows your device setting. These choices are saved on this device only.</span></div></div>
   <div class="card stack"><h2>Coach or partner access</h2><p class="muted">When sharing is on, people you share this page with can see a summary in Coach view: day, level, streak, weekly score, speaking and writing scores, top weaknesses and current focus. They never see your writing, conversations or interview answers.</p>
    <div class="row"><button class="chip" id="st-share" aria-pressed="${S.share}">${S.share?'Sharing is on':'Sharing is off'}</button>${!DB||!UID?'<span class="small muted">Sharing needs you to be signed in to Claude.</span>':''}</div></div>
   <div class="card stack"><h2>Your data</h2><p class="small muted">${DB&&UID?'Your progress is saved to your Claude account and is private to you.':'Your progress is saved in this browser only. Use the same browser each day, and download a backup now and then.'}${saveState==='error'?' The last save failed; your work is kept in this browser.':''}${saveState==='full'?' Storage is full; older mistakes will be trimmed.':''}</p>
@@ -2022,6 +2080,7 @@ AFTER.settings=()=>{
     if(DL){try{await DL.save({filename:'fluent180-progress.json',data})}catch(e){}return}
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download='fluent180-progress.json';document.body.appendChild(a);a.click();a.remove()};
   wireImport('#st-import','#st-file','#st-confirm');
+  wirePrefChips();
   $('#st-reset').onclick=()=>{$('#st-confirm').innerHTML=`<div class="banner row between"><span>This deletes all progress, scores and mistakes. It can't be undone.</span><div class="row"><button class="btn" id="rs-no">Cancel</button><button class="btn primary" id="rs-yes">Delete everything</button></div></div>`;
     $('#rs-no').onclick=()=>{$('#st-confirm').innerHTML=''};$('#rs-yes').onclick=()=>{const share=S.share;S=blank();if(share)pushCoach();doSave();RT={};go('onboard')}};
 };
