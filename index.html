@@ -1086,11 +1086,17 @@ function vOnboard(){
   const langs=['Arabic','Hindi','Urdu','Tagalog','Malayalam','Bengali','Tamil','Persian','French','Spanish','Portuguese','Russian','Turkish','Chinese','Other'];
   return `<div class="stack">
   <div class="stack-s"><span class="eyebrow">Step 1 of 2 · Your profile</span><h1>Let's build your 180-day plan</h1>
-  <p class="muted">Your coach uses this to choose topics, examples and interview roles. You can change it later in Settings.</p></div>
+  <p class="muted">Three quick answers, then a short level check. You can change everything later in Settings.</p></div>
   <form id="ob" class="card stack" novalidate>
    <div class="grid2">
     <label class="f">Your name<input type="text" id="ob-name" required value="${esc(p.name||'')}" autocomplete="given-name"></label>
     <label class="f">Native language<select id="ob-lang">${langs.map(l=>`<option ${p.lang===l?'selected':''}>${l}</option>`).join('')}</select></label>
+   </div>
+   <div class="stack-s"><span class="f" style="font-weight:600">Time you can give every day</span>
+    <div class="seg" id="ob-min">${[30,60,90,120].map(m=>`<button type="button" class="chip" aria-pressed="${(p.minutes||60)===m}" data-v="${m}">${m} minutes</button>`).join('')}</div></div>
+   <details class="panel"><summary style="cursor:pointer;font-weight:600">Add job details (optional)</summary>
+   <div class="stack" style="margin-top:12px"><p class="small muted">These make examples and interview practice fit your work. You can also add them later in Settings.</p>
+   <div class="grid2">
     <label class="f">Where you live now<input type="text" id="ob-country" value="${esc(p.country||'')}" placeholder="e.g. Egypt"></label>
     <label class="f">Where you want to work<input type="text" id="ob-target" value="${esc(p.target||'United Arab Emirates (Dubai)')}"></label>
     <label class="f">Current or last job<input type="text" id="ob-job" value="${esc(p.job||'')}" placeholder="e.g. Cashier"></label>
@@ -1100,11 +1106,10 @@ function vOnboard(){
    </div>
    <div class="stack-s"><span class="f" style="font-weight:600">Your English level today</span>
     <div class="seg" id="ob-self">${['A1','A2','B1','B2',"I don't know"].map(l=>`<button type="button" class="chip" aria-pressed="${(p.self||"I don't know")===l}" data-v="${esc(l)}">${esc(l)}</button>`).join('')}</div></div>
-   <div class="stack-s"><span class="f" style="font-weight:600">Time you can give every day</span>
-    <div class="seg" id="ob-min">${[30,60,90,120].map(m=>`<button type="button" class="chip" aria-pressed="${(p.minutes||60)===m}" data-v="${m}">${m} minutes</button>`).join('')}</div></div>
    <label class="f">Your career goal<textarea id="ob-goaltext" style="min-height:90px" placeholder="e.g. Get an office job in Dubai within six months and speak confidently in meetings.">${esc(p.goal||'')}</textarea></label>
+   </div></details>
    <p class="small muted" id="ob-err" hidden>Please enter your name.</p>
-   <div class="row"><button class="btn primary big" type="submit">Continue to placement test</button></div>
+   <div class="row"><button class="btn primary big" type="submit">Continue</button></div>
   </form>
   <div class="row"><span class="small muted">Already used Fluent180 at another address?</span><button class="btn ghost" type="button" id="ob-import">Import learning data</button><input type="file" id="ob-file" accept=".json,application/json" hidden></div>
   <div id="ob-importbox"></div></div>`;
@@ -1130,12 +1135,16 @@ function vPlacement(){
 }
 function checkView(){
   const C=RT.check;const title=C.mode==='placement'?'Placement test':C.mode==='final'?'Final 180-day assessment':'Monthly assessment';
-  const steps=['grammar','vocab','reading',TTS?'listening':null,'writing','speaking'].filter(Boolean);
+  const steps=C.quick?['grammar','vocab']:['grammar','vocab','reading',TTS?'listening':null,'writing','speaking'].filter(Boolean);
   const si=steps.indexOf(C.step);
   const prog=`<div class="phase" style="grid-template-columns:repeat(${steps.length},1fr)">${steps.map((s,i)=>`<div class="${i<si?'on':i===si?'cur':''}"></div>`).join('')}</div>`;
   let body='';
   if(C.step==='intro'){
-    body=`<div class="card stack"><h2>${title}</h2>
+    body=C.mode==='placement'?`<div class="card stack"><h2>Find your starting level</h2>
+    <p>This sets where your plan starts. Answer honestly; guessing makes your plan harder than it should be.</p>
+    <div class="stack-s"><div class="row"><button class="btn primary big" id="ck-quick">Quick check · about 5 minutes</button></div><span class="small muted">20 grammar and vocabulary questions. Your reading, listening, writing and speaking levels are then measured from your first days of tasks.</span></div>
+    <div class="stack-s"><div class="row"><button class="btn" id="ck-go">Full test · 30–45 minutes</button></div><span class="small muted">Adds reading, ${TTS?'listening, ':''}writing and speaking for a more exact start.</span></div></div>`
+    :`<div class="card stack"><h2>${title}</h2>
     <p>${C.mode==='placement'?'This measures where you are today so your plan starts at the right level. It takes about 30–45 minutes. Answer honestly; guessing makes your plan harder than it should be.':'This repeats the placement format with new questions so you can compare your level with Day 1.'}</p>
     <ul class="fb-list"><li>Grammar — ${C.mode==='placement'?22:12} questions</li><li>Vocabulary — ${C.mode==='placement'?12:8} questions</li><li>Reading — one workplace email</li>${TTS?'<li>Listening — one phone call</li>':''}<li>Writing — one short email</li><li>Speaking — two questions</li></ul>
     <div class="row"><button class="btn primary big" id="ck-go">Start</button></div></div>`;
@@ -1217,6 +1226,9 @@ function defaultItems(){return{grammar:PG,vocab:PV,reading:PREAD,listening:PLIST
 AFTER.placement=()=>{
   const C=RT.check;
   const next=step=>{C.step=step;C.i=0;render();window.scrollTo(0,0)};
+  /* quick check: a band-balanced subset of the grammar and vocabulary banks; the other skills start unmeasured */
+  const pickBands=(bank,n)=>{const c={};return bank.filter(x=>(c[x.b]=(c[x.b]||0)+1)<=(n[x.b]||0))};
+  const q=$('#ck-quick');if(q)q.onclick=()=>{C.quick=true;C.items=Object.assign(defaultItems(),{grammar:pickBands(PG,{A2:4,B1:5,B2:3}),vocab:pickBands(PV,{A2:2,B1:4,B2:2})});next('grammar')};
   const b=$('#ck-go');if(b)b.onclick=async()=>{
     if(C.mode==='placement'||!AIOK){C.items=defaultItems();next('grammar');return}
     C.step='loading';render();
@@ -1227,7 +1239,7 @@ AFTER.placement=()=>{
     const bank=C.step==='grammar'?C.items.grammar:C.items.vocab;
     document.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{
       const it=bank[C.i];C.ans[C.step].push({p:it.p,b:it.b,ok:it.o[+o.dataset.k]===it.a,chosen:it.o[+o.dataset.k],q:it.q,a:it.a});
-      if(C.i+1<bank.length){C.i++;render()}else next(C.step==='grammar'?'vocab':'reading');
+      if(C.i+1<bank.length){C.i++;render()}else if(C.step==='vocab'&&C.quick)finishCheck();else next(C.step==='grammar'?'vocab':'reading');
     });
   }
   if(C.step==='reading'||C.step==='listening'){
@@ -1264,10 +1276,11 @@ function weightedPct(arr){const W={A2:1,B1:1.3,B2:1.6,C1:1.8};let t=0,g=0;for(co
 async function finishCheck(){
   const C=RT.check;C.step='scoring';render();
   const res={grammar:weightedPct(C.ans.grammar),vocabulary:weightedPct(C.ans.vocab),
-    reading:C.items.reading.qs.length?C.items.reading.qs.filter((q,i)=>q.o[C.ans.reading[i]]===q.a).length/C.items.reading.qs.length*100:null,
-    listening:TTS&&C.items.listening?C.items.listening.qs.filter((q,i)=>q.o[C.ans.listening[i]]===q.a).length/C.items.listening.qs.length*100:null,
+    reading:C.quick?null:C.items.reading.qs.length?C.items.reading.qs.filter((q,i)=>q.o[C.ans.reading[i]]===q.a).length/C.items.reading.qs.length*100:null,
+    listening:!C.quick&&TTS&&C.items.listening?C.items.listening.qs.filter((q,i)=>q.o[C.ans.listening[i]]===q.a).length/C.items.listening.qs.length*100:null,
     writing:null,speaking:null,professional:null};
   const errs=[];let notes=[];
+  if(C.quick)notes.push('Quick check: this level comes from grammar and vocabulary only. Reading, listening, writing and speaking are measured from your first days of tasks.');
   C.ans.grammar.concat(C.ans.vocab).filter(a=>!a.ok).forEach(a=>{if(a.q.includes('___'))errs.push({original:a.q.replace('___',a.chosen),corrected:a.q.replace('___',a.a),explanation:'Placement test item.',pattern:a.p,category:a.p})});
   {
     const jobs=[];
