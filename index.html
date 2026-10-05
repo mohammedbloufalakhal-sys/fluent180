@@ -954,6 +954,25 @@ function deliveryMetrics(text,dur,mode){
 }
 
 /* ================= boot ================= */
+/* Saved state can be missing fields (older versions) or damaged; fill every field from blank() so views never read undefined. */
+function sanitizeState(raw){
+  const b=blank();
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return b;
+  const s=Object.assign({},b,raw),isObj=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
+  for(const k in b){
+    const d=b[k];
+    if(Array.isArray(d)){if(!Array.isArray(s[k]))s[k]=d}
+    else if(isObj(d))s[k]=isObj(s[k])?Object.assign(d,s[k]):d;
+  }
+  for(const k of ['profile','placement','today','next','lastReport'])if(!isObj(s[k]))s[k]=null;
+  s.day=Number.isFinite(+s.day)&&+s.day>=1?Math.floor(+s.day):1;
+  return s;
+}
+function bootFailed(e){
+  console.error('[Fluent180] startup failed',e);
+  $('#app').innerHTML=`<div class="card stack" style="margin-top:24px"><h2>Fluent180 could not start</h2><p class="muted">Something went wrong while loading. Your saved progress has not been deleted. Reloading usually fixes it.</p><div class="row"><button class="btn primary" id="bf-reload">Reload</button></div></div>`;
+  $('#bf-reload').onclick=()=>location.reload();
+}
 async function boot(){
   if(window.claude&&typeof window.claude.use==='function'){
     const [db,user,sample,dl]=await Promise.all([claude.use('db').catch(()=>null),claude.use('user').catch(()=>null),claude.use('sample').catch(()=>null),claude.use('downloads').catch(()=>null)]);
@@ -961,8 +980,7 @@ async function boot(){
     if(USER){try{UID=await USER.id()}catch(e){UID=null}}
   }
   await aiInit();AIOK=AIS.provider!=='builtin';
-  S=await load()||blank();
-  S=Object.assign(blank(),S);
+  S=sanitizeState(await load());
   const t=todayStr();
   RT.welcomeBack=S.lastActive&&daysBetween(S.lastActive,t)>=2;
   S.lastActive=t;
@@ -1434,13 +1452,13 @@ JSON: {"title":"","setting":"one sentence","lines":[{"s":"A|B","name":"","t":"li
      <div class="stack-s"><span class="eyebrow">Useful phrases</span><ul class="fb-list">${(c.phrases||[]).map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`:`<div class="row"><button class="btn primary big" id="ls-check">Check answers</button></div>`}
    ${L.done?`<div class="row between"><span class="score" style="font-size:1.3rem">${t.score}/100</span><button class="btn primary big" id="tk-home">Back to today's plan</button></div>`:''}</div>`);
   $('#ls-play').onclick=()=>{L.plays++;$('#ls-play').disabled=true;sayLines(c.lines.map(l=>({s:l.s,t:l.t})),rate,()=>{const b=$('#ls-play');if(b){b.disabled=L.plays>=3;b.textContent=`Play again (${3-L.plays} left)`}})};
-  $('#ls-stop').onclick=()=>{speechSynthesis.cancel();const b=$('#ls-play');if(b)b.disabled=L.plays>=3};
+  $('#ls-stop').onclick=()=>{if(TTS)speechSynthesis.cancel();const b=$('#ls-play');if(b)b.disabled=L.plays>=3};
   if(!L.done){
     document.querySelectorAll('.opts[data-q]').forEach(g=>g.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{g.querySelectorAll('.opt').forEach(x=>x.classList.remove('sel'));o.classList.add('sel');L.ans[+g.dataset.q]=+o.dataset.k}));
     $('#ls-check').onclick=()=>{
       if(!L.plays){alertInline('#ls-check','Play the dialogue at least once.');return}
       if(c.questions.some((q,i)=>L.ans[i]==null)){alertInline('#ls-check','Answer every question first.');return}
-      const ok=c.questions.filter((q,i)=>q.o[L.ans[i]]===q.a).length;L.done=true;speechSynthesis.cancel();
+      const ok=c.questions.filter((q,i)=>q.o[L.ans[i]]===q.a).length;L.done=true;if(TTS)speechSynthesis.cancel();
       completeTask(t,ok/c.questions.length*100,{listening:ok/c.questions.length*100});runListening(t)};
   }else wireDone(t);
 }
@@ -2013,7 +2031,7 @@ function vAfter180(){
 AFTER.home=(orig=>()=>{if(S.day>180&&!S.mode){document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{S.profile.minutes=+b.dataset.min;S.mode=b.dataset.mode;save();go(b.dataset.mode==='iv'?'interview':'home')});return}orig()})(AFTER.home);
 
 window.addEventListener('pagehide',()=>{if(S)doSave()});
-boot();
+boot().catch(bootFailed);
 </script>
 
 </body>
