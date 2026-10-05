@@ -156,6 +156,7 @@ textarea{min-height:160px;resize:vertical;line-height:1.5}
 .msg.me{background:var(--accent-soft);align-self:flex-end;border-bottom-right-radius:4px}
 .banner{border:1px solid var(--line);background:var(--warn-soft);color:var(--ink);border-radius:10px;padding:12px 14px;font-size:.93rem}
 .banner.info{background:var(--info-soft)}
+.toast{position:fixed;z-index:20;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:calc(100vw - 32px);background:var(--good-soft);color:var(--ink);border:1px solid var(--good);border-radius:12px;padding:12px 16px;font-size:.95rem;box-shadow:var(--shadow)}
 .spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:middle}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spinner{animation-duration:3s}}
@@ -968,6 +969,23 @@ function sanitizeState(raw){
   s.day=Number.isFinite(+s.day)&&+s.day>=1?Math.floor(+s.day):1;
   return s;
 }
+/* Restore progress from an exported fluent180-progress.json (same shape as the saved state). */
+function toast(msg){const t=document.createElement('div');t.className='toast';t.setAttribute('role','status');t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),6000)}
+function wireImport(btnSel,fileSel,boxSel){
+  const btn=$(btnSel),inp=$(fileSel),box=$(boxSel);if(!btn||!inp||!box)return;
+  const fail=m=>{box.innerHTML=`<div class="banner">${esc(m)}</div>`};
+  const apply=d=>{S=sanitizeState(d);S.lastActive=todayStr();doSave();RT={};go(!S.profile?'onboard':!S.placement?'placement':'home');toast('Progress restored successfully. Your learning history is up to date.')};
+  btn.onclick=()=>inp.click();
+  inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0];inp.value='';if(!f)return;
+    if(f.size>8e6){fail('That file is too large to be a Fluent180 export. Nothing was changed.');return}
+    let d;try{d=JSON.parse(await f.text())}catch(e){fail('That file could not be read. Choose the fluent180-progress.json file you exported. Nothing was changed.');return}
+    if(!d||typeof d!=='object'||Array.isArray(d)||typeof d.v!=='number'||!('profile' in d)||!('day' in d)||!Array.isArray(d.days)){fail('That file is not a Fluent180 export. Nothing was changed.');return}
+    if(!S.profile){apply(d);return}
+    box.innerHTML=`<div class="banner row between"><span>Importing replaces the progress saved in this browser with the file's progress (${esc(d.profile&&d.profile.name||'no name')}, day ${Math.min(+d.day||1,180)}). It can't be undone.</span><div class="row"><button class="btn" id="im-no">Cancel</button><button class="btn primary" id="im-yes">Replace my progress</button></div></div>`;
+    $('#im-no').onclick=()=>{box.innerHTML=''};$('#im-yes').onclick=()=>apply(d);
+  };
+}
 function bootFailed(e){
   console.error('[Fluent180] startup failed',e);
   $('#app').innerHTML=`<div class="card stack" style="margin-top:24px"><h2>Fluent180 could not start</h2><p class="muted">Something went wrong while loading. Your saved progress has not been deleted. Reloading usually fixes it.</p><div class="row"><button class="btn primary" id="bf-reload">Reload</button></div></div>`;
@@ -1036,9 +1054,12 @@ function vOnboard(){
    <label class="f">Your career goal<textarea id="ob-goaltext" style="min-height:90px" placeholder="e.g. Get an office job in Dubai within six months and speak confidently in meetings.">${esc(p.goal||'')}</textarea></label>
    <p class="small muted" id="ob-err" hidden>Please enter your name.</p>
    <div class="row"><button class="btn primary big" type="submit">Continue to placement test</button></div>
-  </form></div>`;
+  </form>
+  <div class="row"><span class="small muted">Already used Fluent180 at another address?</span><button class="btn ghost" type="button" id="ob-import">Import learning data</button><input type="file" id="ob-file" accept=".json,application/json" hidden></div>
+  <div id="ob-importbox"></div></div>`;
 }
 AFTER.onboard=()=>{
+  wireImport('#ob-import','#ob-file','#ob-importbox');
   const pick=id=>document.querySelectorAll('#'+id+' .chip').forEach(c=>c.onclick=()=>{document.querySelectorAll('#'+id+' .chip').forEach(x=>x.setAttribute('aria-pressed','false'));c.setAttribute('aria-pressed','true')});
   pick('ob-self');pick('ob-min');
   $('#ob').onsubmit=e=>{e.preventDefault();
@@ -1990,7 +2011,8 @@ function vSettings(){
   <div class="card stack"><h2>Coach or partner access</h2><p class="muted">When sharing is on, people you share this page with can see a summary in Coach view: day, level, streak, weekly score, speaking and writing scores, top weaknesses and current focus. They never see your writing, conversations or interview answers.</p>
    <div class="row"><button class="chip" id="st-share" aria-pressed="${S.share}">${S.share?'Sharing is on':'Sharing is off'}</button>${!DB||!UID?'<span class="small muted">Sharing needs you to be signed in to Claude.</span>':''}</div></div>
   <div class="card stack"><h2>Your data</h2><p class="small muted">${DB&&UID?'Your progress is saved to your Claude account and is private to you.':'Your progress is saved in this browser only. Use the same browser each day, and download a backup now and then.'}${saveState==='error'?' The last save failed; your work is kept in this browser.':''}${saveState==='full'?' Storage is full; older mistakes will be trimmed.':''}</p>
-   <div class="row"><button class="btn" id="st-export">Download my data (JSON)</button><button class="btn" id="st-reset">Start over</button></div><div id="st-confirm"></div></div>
+   <div class="row"><button class="btn" id="st-export">Export my learning data</button><button class="btn" id="st-import">Import learning data</button><input type="file" id="st-file" accept=".json,application/json" hidden><button class="btn" id="st-reset">Start over</button></div>
+   <p class="small muted">Moving to a new device, browser or web address? Export here, then import the file there.</p><div id="st-confirm"></div></div>
   <div class="card stack"><h2>About the scores</h2><p class="small muted">Levels are AI-estimated and not an official certificate. Pronunciation is not scored yet. When your microphone works, speaking uses your voice; otherwise you type what you would say and fluency is not scored.</p></div></div>`;
 }
 AFTER.settings=()=>{
@@ -1999,6 +2021,7 @@ AFTER.settings=()=>{
   const ex=$('#st-export');if(ex)ex.onclick=async()=>{const data=JSON.stringify(S,null,2);
     if(DL){try{await DL.save({filename:'fluent180-progress.json',data})}catch(e){}return}
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download='fluent180-progress.json';document.body.appendChild(a);a.click();a.remove()};
+  wireImport('#st-import','#st-file','#st-confirm');
   $('#st-reset').onclick=()=>{$('#st-confirm').innerHTML=`<div class="banner row between"><span>This deletes all progress, scores and mistakes. It can't be undone.</span><div class="row"><button class="btn" id="rs-no">Cancel</button><button class="btn primary" id="rs-yes">Delete everything</button></div></div>`;
     $('#rs-no').onclick=()=>{$('#st-confirm').innerHTML=''};$('#rs-yes').onclick=()=>{const share=S.share;S=blank();if(share)pushCoach();doSave();RT={};go('onboard')}};
 };
